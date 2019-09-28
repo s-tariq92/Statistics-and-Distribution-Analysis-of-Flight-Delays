@@ -1,0 +1,518 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+flights=read.csv("flights.csv",
+                stringsAsFactors=FALSE,na.strings = "") 
+
+library(tidyverse)
+install.packages("fitdistrplus")
+library("fitdistrplus")
+library(ggplot2)
+install.packages("stringr")
+library(stringr)
+install.packages("dplyr")
+library(dplyr)
+install.packages("VennDiagram")
+library(VennDiagram)
+install.packages("ggpubr")
+library(ggpubr)
+```
+
+```{r}
+flights$dtally=1
+```
+
+
+```{r}
+#pick the most popular airlines
+
+
+#filter by well-known airlines
+#UA AA US B6 NK WN DL VX
+
+
+flights=dplyr::filter(flights, AIRLINE == c('UA', 'AA', 'US', 'B6', 'NK', 'WN', 'DL', 'VX'))
+
+
+```
+
+
+```{r}
+#filter by late
+
+
+#arrived late = positive
+delayed=dplyr::filter(flights,ARRIVAL_DELAY> '0')
+
+#required columns only
+delayed=cbind.data.frame(delayed$MONTH, delayed$DAY, delayed$AIRLINE, delayed$SCHEDULED_DEPARTURE, delayed$DEPARTURE_TIME, delayed$DEPARTURE_DELAY, delayed$SCHEDULED_ARRIVAL, delayed$ARRIVAL_TIME, delayed$ARRIVAL_DELAY, delayed$dtally)
+colnames(delayed)=c('MONTH', 'DAY', 'AIRLINE', 'SCHEDULED_DEPARTURE', 'DEPARTURE_TIME', 'DEPARTURE_DELAY', 'SCHEDULED_ARRIVAL', 'ARRIVAL_TIME', 'ARRIVAL_DELAY', 'dtally')
+
+```
+
+```{r}
+#average delay time of all flights
+all=mean(delayed$ARRIVAL_DELAY)
+
+#max min mean of each airline
+df=summarise(group_by(delayed,AIRLINE),
+                             Avg_Delay=mean(ARRIVAL_DELAY, na.rm=TRUE))
+
+df1=summarise(group_by(delayed,AIRLINE),
+                             Max_Delay=max(ARRIVAL_DELAY, na.rm=TRUE))
+
+df2=summarise(group_by(delayed,AIRLINE),
+                             Min_Delay=min(ARRIVAL_DELAY, na.rm=TRUE))
+
+summary=cbind(df, df1$Max_Delay, df2$Min_Delay)
+
+colnames(summary)=c("AIRLINE", "AVG_DELAY", "MAX_DELAY", "MIN_DELAY")
+
+#difference from all
+summary$DIFFERENCE=summary$AVG_DELAY-all 
+
+#boxplot of min max mean
+ggplot(delayed, aes(x=AIRLINE, y=ARRIVAL_DELAY)) + 
+  geom_violin()+
+  stat_summary(fun.y=mean, geom="point", shape=23, size=2, color="red", fill='red')+
+  stat_summary(fun.y=max, geom="point", shape=23, size=2, color="red", fill='red')+
+  ggtitle("Spread of Airlines' Delay-Times")+
+  labs(x = "Airline", y = "Arrival Delay-Time (minutes)")
+
+#75th percentile
+ggplot(delayed, aes(x=AIRLINE, y=ARRIVAL_DELAY)) + 
+  geom_violin(fill="lightblue")+
+  ggtitle("Spread of 75th percentile of Airlines' Delay-Times")+
+  labs(x = "Airline", y = "Arrival Delay-Time (minutes)")+
+  ylim(0,quantile(delayed$ARRIVAL_DELAY, na.rm=TRUE, 0.75))+
+  geom_boxplot(width=0.1, fill="salmon")
+
+
+#histograms of mean
+summary$AVG_DELAY=round(summary$AVG_DELAY, digits=2)
+all=round(all, digits=2)
+summary$DIFFERENCE=round(summary$DIFFERENCE, digits=2)
+
+
+ggplot(data=summary, aes(x=AIRLINE, y=AVG_DELAY, fill='AIRLINE')) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_hline(yintercept=all, color="tomato2", size=0.5)+
+    annotate(geom="text", x=7, y=35, label=paste0("Average Delay ",all, " Minutes"),
+              color="tomato2")+
+  annotate(geom="text", x=6.1, y=37, label=paste0("Population"),
+              color="tomato2")+
+  ggtitle("Mean Delay Time Of Each Airline")+
+  labs(x = "Airline", y = "Average Delay Time (minutes)")+
+  geom_text(aes(label=AVG_DELAY), vjust=3, color="white",
+            position = position_dodge(0.9), size=4.0)+
+  scale_fill_manual(values = c("royalblue1"))+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+
+ggplot(data=summary, aes(x=AIRLINE, y=DIFFERENCE, fill='AIRLINE')) +
+  geom_bar(stat="identity", position=position_dodge())+
+  ggtitle("Difference of Each Airline's Mean from Population Mean")+
+  labs(x = "Airline", y = "Time (minutes)")+
+  geom_text(aes(label=DIFFERENCE), vjust=-0.25, color="black",
+            position = position_dodge(3), size=4.0)+
+  scale_fill_manual(values = c("royalblue1"))+
+  annotate(geom="text", x=7, y=1, label=paste0("Delay ",all, " Minutes"),
+              color="tomato2")+
+  annotate(geom="text", x=7, y=1.6, label=paste0("Population Average"),
+              color="tomato2")+
+  geom_hline(yintercept=0, color="tomato2", size=0.5)
+```
+
+
+
+
+```{r}
+#filter above a certain delay time 
+delayed30=dplyr::filter(flights,ARRIVAL_DELAY>= 30)
+```
+
+
+
+```{r}
+#percent of flights delayed over 30
+
+#all flights listed
+airlines=(summarise(group_by(flights, AIRLINE),
+                             count=sum(dtally, na.rm=TRUE)))    #AIRLINES =  how many flights of each airline
+      
+delays=(summarise(group_by(delayed30, AIRLINE),
+                             count=sum(dtally, na.rm=TRUE))) #DELAYS= how many delays of each airline
+
+percentdelay=cbind(airlines,delays$count) #PERCENT DELAY= count of flights, delays, percentage
+
+percentdelay$percent=(percentdelay$`delays$count`/percentdelay$count)*100
+
+allperc=(sum(delayed30$dtally)/sum(airlines$count))*100
+
+#histogram of percent over 30
+percentdelay$percent=round(percentdelay$percent,digits=2)
+allperc=round(allperc,digits=2)
+
+ggplot(data=percentdelay, aes(x=AIRLINE, y=percent, fill="airline")) +
+  geom_bar(stat="identity", position=position_dodge())+
+  geom_hline(yintercept=allperc, color="tomato2", size=0.5)+
+    annotate(geom="text", x=6.5, y=15, label=paste0(allperc, "% of all flights delayed over 30 mins"),
+              color="tomato2")+
+  ggtitle("Percent of flights delayed over 30 min by Each Airline")+
+  labs(x = "Airline", y = "% of Delayed FLights")+
+  geom_text(aes(label=percent), vjust=1, color="white",
+            position = position_dodge(0.9), size=3.5)+
+    scale_fill_manual(values = c("royalblue1"))+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+DL30 <- dplyr::filter(delayed30, AIRLINE =='DL')
+NK30 <- dplyr::filter(delayed30, AIRLINE =='NK')
+t.test(DL30$ARRIVAL_DELAY , NK30$ARRIVAL_DELAY)
+```
+
+
+
+```{r}
+#ticket PRICE
+ticket=data.frame(airlines$AIRLINE) #PRICE DATA BY AIRLINE
+ticket$price=1
+
+
+ticket[1,2]=227
+  ticket[2,2]=159
+  ticket[3,2]=238
+  ticket[4,2]=117
+  ticket[5,2]=234
+  ticket[6,2]= 200
+  ticket[7,2]= 164
+  ticket[8,2]= 158
+  
+  
+  percentdelay$ticket=ticket$price
+  
+  library(ggpubr)
+  ggscatter(percentdelay, x = "percent", y = "ticket",
+          add = "reg.line", conf.int = TRUE, 
+          add.params = list(color = "red", fill = "salmon"),
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "Percent of flights delayed % ", ylab = "Ticket Price $", title = "Correlation of Delays to Ticket Price", color = "seagreen")
+  
+  
+  ggscatter(percentdelay, y = "percent", x = "ticket",
+          add = "reg.line", conf.int = TRUE, 
+          add.params = list(color = "red", fill = "salmon"),
+          cor.coef = TRUE, cor.method = "pearson",
+          ylab = "Percent of flights delayed %", xlab = "Ticket Price $", title = "Correlation of Ticket Price to Delays", color = "seagreen")
+  #change the labels here
+  
+  
+  kfticket=Kendall_coeff=abs(cor(percentdelay$percent, percentdelay$ticket, method="kendall", use="pairwise"))
+  pfticket=Pearson_coeff=round(cor(percentdelay$percent, percentdelay$ticket), 4)
+  
+ # There is a relationship between average price and average points, they are dependent and statistically significant. We know this because the p value is below 0.05 and kendall coefficient is not near zero. Meaning the increase in points does increase the price
+  
+  #good linear relation since R value is more than 0.7
+ 
+
+```
+
+
+
+```{r}
+#filter out worst airline SPIRIT AIRLINES from delayed
+spirit=dplyr::filter(delayed,AIRLINE== 'NK')
+
+spirit30=dplyr::filter(spirit,ARRIVAL_DELAY>= 30)
+
+spiritdf=summarise(group_by(spirit,ARRIVAL_DELAY),
+                             Delay_Count=sum(dtally, na.rm=TRUE))
+
+spiritdf30=dplyr::filter(spiritdf,ARRIVAL_DELAY>=30)
+
+#to make time range
+#times=data.frame(unique(spiritdf$ARRIVAL_DELAY))
+#times=data.frame(formatC(times$unique.spiritdf.ARRIVAL_DELAY., width=3, flag="0"))
+#colnames(times)=c("time_range")
+
+#library(stringr)
+#timesdf=data.frame(str_split_fixed(times$time_range, "", 3))
+#timesdf$X3=0
+#timesdf2= data.frame(paste0(timesdf$X1, timesdf$X2, timesdf$X3))
+#colnames(timesdf2)=c("time_range")
+
+#spiritdf=cbind(spiritdf, timesdf2)
+
+
+#PMF
+totaldelay=sum(spirit$dtally) 
+spiritdf$probability=spiritdf$Delay_Count/totaldelay
+
+
+#stats
+descdist(spirit$ARRIVAL_DELAY)
+expectedvalue=40.31225
+sd=52.85971
+
+#plot of spirit delays
+ggplot(data=spiritdf, aes(x=ARRIVAL_DELAY, y=Delay_Count, fill="lightblue")) +
+  geom_bar(stat="identity", position=position_stack())+
+  labs(x = "Delay Time (minutes)", y = "Number of Flights Delayed")+
+  theme_dark()+
+   ggtitle("Distribution of Delay Times")+scale_fill_manual(values = c("lightblue"))+
+   geom_vline(xintercept=expectedvalue, color="tomato2", size=1)+
+    geom_smooth(span = 0.1, color='red', size=2)
+
+#plot of spirit delays over 30
+ggplot(data=spiritdf30, aes(x=ARRIVAL_DELAY, y=Delay_Count, fill="lightblue")) +
+  geom_bar(stat="identity", position=position_stack())+
+  labs(x = "Delay Time (minutes)", y = "Number of Flights Delayed")+
+  theme_dark()+
+   ggtitle("Distribution of Delay Times over 30 mins")+scale_fill_manual(values = c("lightblue"))+
+   geom_vline(xintercept=expectedvalue, color="tomato2", size=1)+
+    geom_smooth(span = 0.3, color='red', size=2)
+#show min x 30
+
+
+```
+
+
+
+```{r}
+#best fit
+#LOGNORMAL
+# for lognormal
+fit_ln <- fitdist(spiritdf$ARRIVAL_DELAY, "lnorm")
+dfln=summary(fit_ln)
+
+par(mfrow=c(2,2))
+plot.legend <- c("lognormal")
+denscomp(list(fit_ln), legendtext = plot.legend, xlab = 'Arrival Delay', xlegend = 'topleft')
+cdfcomp (list(fit_ln), legendtext = plot.legend, xlab = 'Arrival Delay')
+qqcomp  (list(fit_ln), legendtext = plot.legend, xlab = 'Arrival Delay')
+ppcomp  (list(fit_ln), legendtext = plot.legend, xlab = 'Arrival Delay')
+
+#GAMMA
+fit_gm <- fitdist(spiritdf$ARRIVAL_DELAY, "gamma")
+dfgm=summary(fit_gm)
+
+par(mfrow=c(2,2))
+plot.legend <- c("gamma")
+denscomp(list(fit_gm), legendtext = plot.legend, xlab = 'Arrival Delay', xlegend = 'topleft')
+cdfcomp (list(fit_gm), legendtext = plot.legend, xlab = 'Arrival Delay')
+qqcomp  (list(fit_gm), legendtext = plot.legend, xlab = 'Arrival Delay')
+ppcomp  (list(fit_gm), legendtext = plot.legend, xlab = 'Arrival Delay')
+
+
+#EXPONENTIAL
+fit_exp <- fitdist(spiritdf$ARRIVAL_DELAY, "exp")
+dfexp=summary(fit_exp)
+
+par(mfrow=c(2,2))
+plot.legend <- c("exponential")
+denscomp(list(fit_exp), legendtext = plot.legend, xlab = 'Arrival Delay', xlegend = 'topleft')
+cdfcomp (list(fit_exp), legendtext = plot.legend, xlab = 'Arrival Delay')
+qqcomp  (list(fit_exp), legendtext = plot.legend, xlab = 'Arrival Delay')
+ppcomp  (list(fit_exp), legendtext = plot.legend, xlab = 'Arrival Delay')
+
+```
+
+
+
+```{r}
+#PROBABILITIES
+
+#gamma distribution
+#X~gamma(alpha,beta)
+
+ ?Distributions
+
+l=1-pgamma(q=30, shape=1,rate=(1/40.31))
+
+#gamma distribution
+#X~gamma(alpha,beta)
+#shape~alpha, scale~beta
+#mean=alpha*beta; var=alpha*beta^2
+#mean=40.31225, Sd=52.85971
+#alpha=0.5816,beta=69.3088
+
+#delay time over 30 mins
+a=1-pgamma(q=60, shape=0.5816, scale=69.3088)  
+
+#delay time over 60 mins
+b=1-pgamma(q=60, shape=0.5816, scale=69.3088) 
+
+
+ggplot(data=spiritdf, aes(x=ARRIVAL_DELAY, y=probability, fill="lightblue")) +
+  geom_bar(stat="identity", position=position_stack())+
+  labs(x = "Delay Time (minutes)", y = "Probability")+
+  theme_light()+
+   ggtitle("PMF of Delay Times")+scale_fill_manual(values = c("royalblue1"))
+
+
+```
+
+
+```{r}
+#POISSON RATE
+
+#delays per day over 30
+spdays=summarise(group_by(spirit30,DAY),
+                             Delay_Count=sum(dtally, na.rm=TRUE))
+
+spall=dplyr::filter(flights, AIRLINE == 'NK')
+
+spall2=summarise(group_by(spall,DAY),
+                             Total_Count=sum(dtally, na.rm=TRUE))
+
+
+spdays=cbind(spdays,spall2$Total_Count)
+spdays$percent=spdays$Delay_Count/spdays$`spall2$Total_Count`
+
+perdaydelay=mean(spdays$percent)
+
+
+#X~p(x;19.36)
+#poisson distribution X~p(x,lambda)
+#x=R.V. of number of traffic accidents per month
+
+#P(x>50%)
+half=1-ppois(q=50,lambda=19.36)
+
+#P(90<x<100%)
+full=ppois(q=100,lambda=48.72)-ppois(q=90,lambda=19.36)
+
+timeprobs=setNames(data.frame(matrix(ncol = 2, nrow = 20)), c("% of Flights Delayed", "Poisson Probability"))
+
+timeprobs$`% of Flights Delayed`=seq(5,100, by=5)
+
+timeprobs$`Poisson Probability`= (1-ppois(q=timeprobs$`% of Flights Delayed`,lambda=19.36))*100
+timeprobs$`Poisson Probability`=round(timeprobs$`Poisson Probability`, digits=10)
+```
+
+
+
+
+```{r}
+#reasons of delay
+
+
+spallbos=dplyr::filter(spall,ORIGIN_AIRPORT== 'BOS')
+spallbos30=dplyr::filter(spallbos,ARRIVAL_DELAY>=30)
+
+#294 spirits from boston
+#63 spirits boston over 30
+
+
+d=sum(spallbos30$ARRIVAL_DELAY)
+i=sum(spallbos30$AIR_SYSTEM_DELAY)
+e=sum(spallbos30$AIRLINE_DELAY)
+f=sum(spallbos30$LATE_AIRCRAFT_DELAY)
+g=sum(spallbos30$WEATHER_DELAY)
+
+
+reasons=setNames(data.frame(matrix(ncol = 2, nrow = 4)), c("Delay_Reason", "Percent_of_Delayed_Time"))
+reasons[1,1]="Airline Delay"
+reasons[2,1]="Late Aircraft Delay"
+reasons[3,1]="Weather Delay"
+reasons[4,1]="Air System Delay"
+
+
+reasons[1,2]=(e/d)*100
+reasons[2,2]=(f/d)*100
+reasons[3,2]=(g/d)*100
+reasons[4,2]=(i/d)*100
+
+
+
+reasons$`Percent_of_Delayed_Time`=round(reasons$`Percent_of_Delayed_Time`,digits=2)
+
+library(ggplot2)
+ggplot(reasons, aes(x="", y=Percent_of_Delayed_Time, fill=Delay_Reason))+
+  geom_bar(width = 1, stat = "identity")+coord_polar("y", start=0)+
+  geom_text(aes(y = c(38, 75, 3, 20), label = Percent_of_Delayed_Time), size=4, color="royalblue")+
+  scale_fill_brewer(palette = "OrRd")+
+  ggtitle("Percent Breakdown of Time Lost to Delays in One Year")      
+
+```
+
+```{r}
+#venn diagram
+res=cbind.data.frame(spallbos30$AIR_SYSTEM_DELAY, spallbos30$AIRLINE_DELAY, spallbos30$LATE_AIRCRAFT_DELAY, spallbos30$WEATHER_DELAY)
+res=data.frame(ifelse(res==0, 0, 1))
+colnames(res)=c("system", 'airline', 'late_plane', 'weather')
+
+j=sum(res$system)
+k=sum(res$airline)
+l=sum(res$late_plane)
+m=sum(res$weather)
+
+res2=cbind.data.frame(res$system,res$airline)
+res2$count=res2$`res$system`+res2$`res$airline`
+res2$count=ifelse(res2$count==2,1,0)
+n=sum(res2$count)
+
+res3=cbind.data.frame(res$system,res$late_plane)
+res3$count=res3$`res$system`+res3$`res$late_plane`
+res3$count=ifelse(res3$count==2,1,0)
+o=sum(res3$count)
+
+res4=cbind.data.frame(res$airline,res$late_plane)
+res4$count=res4$`res$airline`+res4$`res$late_plane`
+res4$count=ifelse(res4$count==2,1,0)
+p=sum(res4$count)
+
+res5=cbind.data.frame(res$airline,res$late_plane, res$system)
+res5$count=res5$`res$airline`+res5$`res$late_plane`+res5$`res$system`
+res5$count=ifelse(res5$count==3,1,0)
+q=sum(res5$count)
+
+
+grid.newpage()
+venn.plot <- draw.quad.venn(
+  area1 = 57,
+    area2 = 27,
+    area3 = 14,
+    area4 = 4,
+   n12 = 25,
+    n13 = 11,
+    n14 = 3,
+    n23 = 6,
+    n24 = 0,
+  n34 = 0,
+    n123 = 6,
+    n134 = 0,
+    n124 = 0,
+    n234 = 0,
+    n1234 = 0, 
+    category = c("System", "Airline", "Late Airplane", "Weather"),
+    fill = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3"),
+  scaled=TRUE)
+```
+
+
+
+
+```{r}
+#temperature
+
+weather=read.csv("weatherdata.csv",
+               stringsAsFactors=FALSE,na.strings = "")
+
+weather=dplyr::filter(weather,year== '2015')
+
+#1/31 16
+#2/14 11
+#2/12 17
+#12/28 28
+
+
+
+```
+
+
+
